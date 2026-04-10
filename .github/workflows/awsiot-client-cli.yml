@@ -1,0 +1,58 @@
+name: Build AWS IoT Client CLI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-client-cli:
+    name: Build Windows Client CLI
+    runs-on: windows-latest
+    env:
+      MQTT_CLIENT_CERT_PEM_B64: ${{ secrets.MQTT_CLIENT_CERT_PEM_B64 }}
+      MQTT_CLIENT_KEY_PEM_B64: ${{ secrets.MQTT_CLIENT_KEY_PEM_B64 }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller paho-mqtt
+
+      - name: Build client exe
+        shell: pwsh
+        working-directory: services/awsiot-terminal/client-cli
+        run: |
+          python -m PyInstaller --noconfirm --clean --onefile --name mqtt-terminal-cli.v2 mqtt-terminal-cli.py
+          Copy-Item dist\mqtt-terminal-cli.v2.exe .\mqtt-terminal-cli.v2.exe -Force
+
+      - name: Prepare runtime SSL files
+        shell: pwsh
+        working-directory: services/awsiot-terminal/client-cli
+        run: |
+          New-Item -ItemType Directory -Force ssl | Out-Null
+          Copy-Item ..\..\..\scripts\awsiot-edge-deb-template\opt\awsiot\certs\AmazonRootCA1.pem .\ssl\AmazonRootCA1.pem -Force
+          if (-not [string]::IsNullOrWhiteSpace($env:MQTT_CLIENT_CERT_PEM_B64)) {
+            [IO.File]::WriteAllBytes((Resolve-Path .\ssl\client-certificate.pem.crt), [Convert]::FromBase64String($env:MQTT_CLIENT_CERT_PEM_B64))
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:MQTT_CLIENT_KEY_PEM_B64)) {
+            [IO.File]::WriteAllBytes((Resolve-Path .\ssl\client-private.pem.key), [Convert]::FromBase64String($env:MQTT_CLIENT_KEY_PEM_B64))
+          }
+
+      - name: Upload client artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mqtt-terminal-cli-v2-windows
+          path: |
+            services/awsiot-terminal/client-cli/mqtt-terminal-cli.v2.exe
+            services/awsiot-terminal/client-cli/mqtt-terminal-cli.conf
+            services/awsiot-terminal/client-cli/MQTT-PROTOCOL.md
+            services/awsiot-terminal/client-cli/ssl/AmazonRootCA1.pem
+            services/awsiot-terminal/client-cli/ssl/client-certificate.pem.crt
+            services/awsiot-terminal/client-cli/ssl/client-private.pem.key

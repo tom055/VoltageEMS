@@ -1,0 +1,14 @@
+{
+  "registration_completed": false,
+  "region": "us-east-1",
+  "thing_name": "",
+  "thing_group_name": "GreengrassQuickStartGroup",
+  "certificate_id": "",
+  "certificate_arn": "",
+  "device_sn": "",
+  "last_checked_at": "",
+  "last_result": "",
+  "mqtt_endpoint": "d08715432na143627x533-ats.iot.us-east-1.amazonaws.com",
+  "device_cert_path": "/opt/awsiot/certs/device.pem.crt",
+  "device_key_path": "/opt/awsiot/certs/device.private.pem.key"
+}

@@ -1,0 +1,9 @@
+Package: awsiot-terminal-agent
+Version: 0.1.0
+Section: utils
+Priority: optional
+Architecture: arm64
+Maintainer: Cheng Li
+Depends: libc6, systemd
+Description: AWS IoT terminal agent for edge devices
+ Rust-based AWS IoT Fleet Provisioning and MQTT terminal agent.

@@ -1,0 +1,25 @@
+#!/bin/sh
+set -eu
+
+install -d -m 700 /opt/awsiot /opt/awsiot/bin /opt/awsiot/conf /opt/awsiot/certs /opt/awsiot/state
+chmod 700 /opt/awsiot /opt/awsiot/bin /opt/awsiot/conf /opt/awsiot/certs /opt/awsiot/state
+chmod 755 /opt/awsiot/bin/awsiot-terminal-agent
+chmod 600 /opt/awsiot/conf/awsiot-device.conf
+chmod 600 /opt/awsiot/certs/AmazonRootCA1.pem
+chmod 600 /opt/awsiot/certs/claim-certificate.pem.crt
+chmod 600 /opt/awsiot/certs/claim-private.pem.key
+chmod 600 /opt/awsiot/state/registration-state.json
+
+if [ ! -f /opt/awsiot/state/session-state.json ]; then
+cat > /opt/awsiot/state/session-state.json <<'EOF'
+{
+  "state": "disconnect",
+  "msgId": "",
+  "updated_at": 0
+}
+EOF
+fi
+chmod 600 /opt/awsiot/state/session-state.json
+
+systemctl daemon-reload
+systemctl enable awsiot-mqtt-terminal.service >/dev/null 2>&1 || true

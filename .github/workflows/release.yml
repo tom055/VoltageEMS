@@ -133,6 +133,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y makeself
 
+      - name: Build bundled AWS IoT edge deb
+        if: matrix.arch == 'arm64'
+        env:
+          AWSIOT_CLAIM_CERT_PEM_B64: ${{ secrets.AWSIOT_CLAIM_CERT_PEM_B64 }}
+          AWSIOT_CLAIM_KEY_PEM_B64: ${{ secrets.AWSIOT_CLAIM_KEY_PEM_B64 }}
+        run: |
+          chmod +x scripts/check-awsiot-bundle.sh scripts/build-awsiot-edge-deb.sh
+          ./scripts/check-awsiot-bundle.sh "${{ matrix.arch }}" source
+          ./scripts/build-awsiot-edge-deb.sh
+
+      - name: Validate bundled AWS IoT edge package
+        run: |
+          chmod +x scripts/check-awsiot-bundle.sh
+          ./scripts/check-awsiot-bundle.sh "${{ matrix.arch }}" bundle
+
       - name: Set up QEMU
         if: matrix.arch == 'amd64'
         uses: docker/setup-qemu-action@v3

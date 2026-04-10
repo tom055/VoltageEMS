@@ -1,0 +1,8 @@
+{
+  "state": "disconnect",
+  "msgId": "",
+  "session_timeout_minutes": 0,
+  "session_deadline_ts": 0,
+  "disconnect_reason": "",
+  "updated_at": 0
+}

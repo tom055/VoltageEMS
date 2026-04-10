@@ -1,0 +1,15 @@
+[Unit]
+Description=AWS IoT MQTT Terminal Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/awsiot/bin
+ExecStart=/opt/awsiot/bin/awsiot-terminal-agent --config /opt/awsiot/conf/awsiot-device.conf --registration-state /opt/awsiot/state/registration-state.json
+Restart=always
+RestartSec=3
+User=root
+
+[Install]
+WantedBy=multi-user.target

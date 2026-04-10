@@ -33,6 +33,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build/installer"
 OUTPUT_DIR="$ROOT_DIR/release"
+AWSIOT_EDGE_DEB="$ROOT_DIR/build/awsiot-edge/awsiot-terminal-agent_0.1.0_arm64.deb"
+AWSIOT_EDGE_INSTALL="$ROOT_DIR/scripts/install-awsiot-deb.sh"
 
 # Parse arguments
 VERSION=""
@@ -679,6 +681,25 @@ else
         cp -r "$ROOT_DIR/dpkg" "$TEMP_PKG_DIR/dpkg"
         chmod +x "$TEMP_PKG_DIR/dpkg/"*.sh 2>/dev/null || true
         echo -e "${GREEN}✓ Included dpkg packages ($(ls "$ROOT_DIR/dpkg/"*.deb 2>/dev/null | wc -l) .deb file(s))${NC}"
+    fi
+
+    if [[ "$ARCH" == "arm64" ]]; then
+        if [[ ! -f "$AWSIOT_EDGE_DEB" ]]; then
+            echo -e "${RED}Error: AWS IoT edge deb not found: $AWSIOT_EDGE_DEB${NC}"
+            rm -rf "$TEMP_PKG_DIR"
+            exit 1
+        fi
+        if [[ ! -f "$AWSIOT_EDGE_INSTALL" ]]; then
+            echo -e "${RED}Error: AWS IoT edge install script not found: $AWSIOT_EDGE_INSTALL${NC}"
+            rm -rf "$TEMP_PKG_DIR"
+            exit 1
+        fi
+
+        mkdir -p "$TEMP_PKG_DIR/dpkg"
+        cp "$AWSIOT_EDGE_DEB" "$TEMP_PKG_DIR/dpkg/"
+        cp "$AWSIOT_EDGE_INSTALL" "$TEMP_PKG_DIR/dpkg/"
+        chmod +x "$TEMP_PKG_DIR/dpkg/install-awsiot-deb.sh"
+        echo -e "${GREEN}Included AWS IoT edge deb${NC}"
     fi
 
     if [[ -n "$SELECTED_SERVICES" ]]; then
