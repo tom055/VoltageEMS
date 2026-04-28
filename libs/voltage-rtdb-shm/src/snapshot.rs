@@ -14,8 +14,8 @@
 //!         └─────────────────────────────────────────┘
 //! ```
 
-use crate::shared_config::DEFAULT_SNAPSHOT_INTERVAL_SECS;
 use crate::ShmHandle;
+use crate::shared_config::DEFAULT_SNAPSHOT_INTERVAL_SECS;
 use anyhow::{Context, Result};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -136,21 +136,21 @@ impl SnapshotManager {
                     if result.is_err() || *self.shutdown_rx.borrow() {
                         tracing::info!("SnapshotManager: shutdown signal received");
                         // Save final snapshot before exiting
-                        if let Err(e) = self.save_now() {
+                        match self.save_now() { Err(e) => {
                             tracing::error!("Failed to save final snapshot: {}", e);
-                        } else {
+                        } _ => {
                             tracing::info!("Final snapshot saved on shutdown");
-                        }
+                        }}
                         break;
                     }
                 }
                 // Periodic snapshot
                 _ = interval.tick() => {
-                    if let Err(e) = self.save_now() {
+                    match self.save_now() { Err(e) => {
                         tracing::warn!("Periodic snapshot failed: {}", e);
-                    } else {
+                    } _ => {
                         tracing::debug!("Periodic snapshot saved to {:?}", self.config.path);
-                    }
+                    }}
                 }
             }
         }
@@ -162,11 +162,12 @@ impl SnapshotManager {
     ///
     /// Can be called at any time to force an immediate snapshot.
     pub fn save_now(&self) -> Result<()> {
-        let writer = self
+        let layout = self
             .shm_handle
-            .writer_arc()
+            .layout_arc()
             .context("SHM writer not available for snapshot")?;
-        writer
+        layout
+            .writer
             .save_snapshot(&self.config.path)
             .context("Failed to save snapshot")
     }

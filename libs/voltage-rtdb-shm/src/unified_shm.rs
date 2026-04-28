@@ -30,11 +30,11 @@
 use crate::channel_points::ChannelPointCounts;
 use crate::shared_config::SharedConfig;
 use crate::vec_impl::PointSlot;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use memmap2::{Mmap, MmapMut, MmapOptions};
 use std::fs::OpenOptions;
 use std::path::PathBuf;
-use std::sync::atomic::{fence, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering, fence};
 use voltage_model::PointType;
 use voltage_routing::RoutingCache;
 
@@ -48,6 +48,37 @@ pub const UNIFIED_VERSION: u32 = 2;
 
 /// Default max slots (100,000 points)
 pub const DEFAULT_MAX_SLOTS: u32 = 100_000;
+
+#[inline]
+fn dirty_word_count(slot_count: usize) -> usize {
+    slot_count.div_ceil(u64::BITS as usize)
+}
+
+fn new_dirty_words(slot_count: usize) -> Vec<AtomicU64> {
+    (0..dirty_word_count(slot_count))
+        .map(|_| AtomicU64::new(0))
+        .collect()
+}
+
+fn read_ne_bytes<const N: usize>(buf: &[u8], start: usize, label: &str) -> Result<[u8; N]> {
+    let end = start
+        .checked_add(N)
+        .with_context(|| format!("Invalid snapshot offset for {}", label))?;
+    let bytes = buf
+        .get(start..end)
+        .with_context(|| format!("Snapshot missing {}", label))?;
+    bytes
+        .try_into()
+        .with_context(|| format!("Invalid snapshot field size for {}", label))
+}
+
+fn read_u64_ne(buf: &[u8], start: usize, label: &str) -> Result<u64> {
+    Ok(u64::from_ne_bytes(read_ne_bytes(buf, start, label)?))
+}
+
+fn read_u32_ne(buf: &[u8], start: usize, label: &str) -> Result<u32> {
+    Ok(u32::from_ne_bytes(read_ne_bytes(buf, start, label)?))
+}
 
 // ========== Header (64 bytes) ==========
 
@@ -361,6 +392,12 @@ pub struct UnifiedWriter {
     slot_count: usize,
     /// Channel layouts (Vec index by channel_id)
     channel_layouts: Vec<ChannelLayout>,
+    /// Process-local dirty slot bitmap for fast SHM→Redis sync.
+    ///
+    /// PointSlot.dirty is shared across processes, but scanning it still costs O(slots).
+    /// This bitmap is set by this writer's `set*` calls so comsrv can drain changed
+    /// slots in O(dirty_words + dirty_slots), with periodic full scans as fallback.
+    dirty_words: Vec<AtomicU64>,
 }
 
 impl UnifiedWriter {
@@ -444,6 +481,7 @@ impl UnifiedWriter {
             max_slots,
             slot_count,
             channel_layouts,
+            dirty_words: new_dirty_words(slot_count),
         })
     }
 
@@ -468,15 +506,16 @@ impl UnifiedWriter {
         raw: f64,
         timestamp_ms: u64,
     ) -> bool {
-        if let Some(layout) = self.channel_layouts.get(channel_id as usize) {
-            if let Some(slot) = layout.slot(point_type, point_id) {
-                self.slot_at(slot).set(value, raw, timestamp_ms);
-                // Update heartbeat
-                self.header()
-                    .writer_heartbeat
-                    .store(timestamp_ms, Ordering::Relaxed);
-                return true;
-            }
+        if let Some(layout) = self.channel_layouts.get(channel_id as usize)
+            && let Some(slot) = layout.slot(point_type, point_id)
+        {
+            self.slot_at(slot).set(value, raw, timestamp_ms);
+            self.mark_dirty_slot(slot);
+            // Update heartbeat
+            self.header()
+                .writer_heartbeat
+                .store(timestamp_ms, Ordering::Relaxed);
+            return true;
         }
         false
     }
@@ -492,9 +531,41 @@ impl UnifiedWriter {
             self.slot_count
         );
         self.slot_at(slot).set(value, raw, timestamp_ms);
+        self.mark_dirty_slot(slot);
         self.header()
             .writer_heartbeat
             .store(timestamp_ms, Ordering::Relaxed);
+    }
+
+    #[inline]
+    fn mark_dirty_slot(&self, slot: usize) {
+        let word_idx = slot / u64::BITS as usize;
+        let bit_idx = slot % u64::BITS as usize;
+        if let Some(word) = self.dirty_words.get(word_idx) {
+            word.fetch_or(1u64 << bit_idx, Ordering::Release);
+        }
+    }
+
+    /// Drain process-local dirty slots set by this writer.
+    ///
+    /// Concurrent writes are safe: if a writer sets a bit before `swap(0)`, this
+    /// call returns it; if it sets after the swap, the bit remains for the next pass.
+    pub fn take_dirty_slots(&self) -> Vec<usize> {
+        let mut slots = Vec::new();
+
+        for (word_idx, word) in self.dirty_words.iter().enumerate() {
+            let mut bits = word.swap(0, Ordering::AcqRel);
+            while bits != 0 {
+                let bit_idx = bits.trailing_zeros() as usize;
+                let slot = word_idx * u64::BITS as usize + bit_idx;
+                if slot < self.slot_count {
+                    slots.push(slot);
+                }
+                bits &= bits - 1;
+            }
+        }
+
+        slots
     }
 
     /// Returns the current writer generation from the SHM header.
@@ -587,6 +658,7 @@ impl UnifiedWriter {
             max_slots,
             slot_count,
             channel_layouts,
+            dirty_words: new_dirty_words(slot_count),
         })
     }
 
@@ -712,6 +784,7 @@ impl UnifiedWriter {
             max_slots,
             slot_count,
             channel_layouts,
+            dirty_words: new_dirty_words(slot_count),
         })
     }
 
@@ -781,10 +854,10 @@ impl UnifiedWriter {
         //   offset 40: routing_hash (AtomicU64 → read as u64)
         //   offset 48: _reserved (16 bytes)
         let snap = &snapshot_data;
-        let snap_magic = u64::from_ne_bytes(snap[0..8].try_into().unwrap());
-        let snap_version = u32::from_ne_bytes(snap[8..12].try_into().unwrap());
-        let snap_slot_count_val = u32::from_ne_bytes(snap[16..20].try_into().unwrap());
-        let snap_routing_hash = u64::from_ne_bytes(snap[40..48].try_into().unwrap());
+        let snap_magic = read_u64_ne(snap, 0, "header.magic")?;
+        let snap_version = read_u32_ne(snap, 8, "header.version")?;
+        let snap_slot_count_val = read_u32_ne(snap, 16, "header.slot_count")?;
+        let snap_routing_hash = read_u64_ne(snap, 40, "header.routing_hash")?;
 
         if snap_magic != UNIFIED_MAGIC {
             bail!(
@@ -851,9 +924,9 @@ impl UnifiedWriter {
             //   offset 24: seq        (AtomicU32 → not needed for restore)
             //   offset 28: dirty      (AtomicU32 → not needed for restore)
             let sb = &snapshot_data[slot_offset_in_file..slot_offset_in_file + slot_size];
-            let value = f64::from_bits(u64::from_ne_bytes(sb[0..8].try_into().unwrap()));
-            let timestamp = u64::from_ne_bytes(sb[8..16].try_into().unwrap());
-            let raw = f64::from_bits(u64::from_ne_bytes(sb[16..24].try_into().unwrap()));
+            let value = f64::from_bits(read_u64_ne(sb, 0, "slot.value_bits")?);
+            let timestamp = read_u64_ne(sb, 8, "slot.timestamp")?;
+            let raw = f64::from_bits(read_u64_ne(sb, 16, "slot.raw_bits")?);
 
             // Validate data: skip NaN and Infinity
             if value.is_nan() || value.is_infinite() || raw.is_nan() || raw.is_infinite() {
@@ -1132,10 +1205,10 @@ impl UnifiedReader {
         F: FnMut(u32, f64),
     {
         for ((ch_id, pt_type, ch_pt_id), target) in routing_cache.c2m_iter() {
-            if target.instance_id == instance_id {
-                if let Some((val, _ts)) = self.get_channel(ch_id, pt_type.to_u8(), ch_pt_id) {
-                    f(target.point_id, val);
-                }
+            if target.instance_id == instance_id
+                && let Some((val, _ts)) = self.get_channel(ch_id, pt_type.to_u8(), ch_pt_id)
+            {
+                f(target.point_id, val);
             }
         }
     }
@@ -1148,14 +1221,14 @@ impl UnifiedReader {
         // M2C: (instance, point_type, point) → (channel, type, point)
         // Filter by instance_id
         for ((inst_id, _inst_type, inst_pt_id), target) in routing_cache.m2c_iter() {
-            if inst_id == instance_id {
-                if let Some((val, _ts)) = self.get_channel(
+            if inst_id == instance_id
+                && let Some((val, _ts)) = self.get_channel(
                     target.channel_id,
                     target.point_type.to_u8(),
                     target.point_id,
-                ) {
-                    f(inst_pt_id, val);
-                }
+                )
+            {
+                f(inst_pt_id, val);
             }
         }
     }

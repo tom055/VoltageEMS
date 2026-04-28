@@ -5,14 +5,14 @@
 
 use anyhow::{Context, Result};
 use common::validation::CsvFields;
-use comsrv::core::config::ComsrvConfig;
-use modsrv::config::ModsrvConfig;
 use serde::de::DeserializeOwned;
 use serde_json::Value as JsonValue;
 use sqlx::{Sqlite, SqlitePool, Transaction};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
+use voltage_config::comsrv::ComsrvConfig;
+use voltage_config::modsrv::ModsrvConfig;
 
 use super::file_utils::{flatten_json, load_csv, load_csv_typed_with_errors, load_csv_with_errors};
 use super::schema;
@@ -94,10 +94,10 @@ fn normalize_protocol_mapping(
                 .or_insert(JsonValue::Bool(false));
             normalized
                 .entry("scale".to_string())
-                .or_insert(JsonValue::Number(Number::from_f64(1.0).unwrap()));
+                .or_insert(JsonValue::Number(Number::from(1)));
             normalized
                 .entry("offset".to_string())
-                .or_insert(JsonValue::Number(Number::from_f64(0.0).unwrap()));
+                .or_insert(JsonValue::Number(Number::from(0)));
             normalized
         },
         "di_do" | "gpio" | "dido" => convert_fields(mapping, &["gpio_number"]),
@@ -431,16 +431,16 @@ impl ConfigSyncer {
         // Validate channel name uniqueness
         let mut channel_names = std::collections::HashMap::new();
         for (idx, channel) in channels.iter().enumerate() {
-            if let Some(name) = channel.get("name").and_then(|v| v.as_str()) {
-                if let Some(existing_idx) = channel_names.insert(name.to_string(), idx) {
-                    return Err(anyhow::anyhow!(
-                        "Duplicate channel name '{}' found at indices {} and {}. \
+            if let Some(name) = channel.get("name").and_then(|v| v.as_str())
+                && let Some(existing_idx) = channel_names.insert(name.to_string(), idx)
+            {
+                return Err(anyhow::anyhow!(
+                    "Duplicate channel name '{}' found at indices {} and {}. \
                          Channel names must be unique. Please rename one of the channels in comsrv.yaml.",
-                        name,
-                        existing_idx,
-                        idx
-                    ));
-                }
+                    name,
+                    existing_idx,
+                    idx
+                ));
             }
         }
 
@@ -691,17 +691,13 @@ impl ConfigSyncer {
                 continue;
             }
 
-            let value_str = match &value {
-                JsonValue::String(s) => s.clone(),
-                _ => serde_json::to_string(&value)?,
-            };
-
-            let value_type = match &value {
-                JsonValue::Bool(_) => "boolean",
-                JsonValue::Number(_) => "number",
-                JsonValue::Array(_) => "array",
-                JsonValue::Object(_) => "object",
-                _ => "string",
+            let (value_str, value_type) = match value {
+                JsonValue::String(s) => (s, "string"),
+                JsonValue::Bool(b) => (b.to_string(), "boolean"),
+                JsonValue::Number(n) => (n.to_string(), "number"),
+                JsonValue::Array(a) => (serde_json::to_string(&JsonValue::Array(a))?, "array"),
+                JsonValue::Object(o) => (serde_json::to_string(&JsonValue::Object(o))?, "object"),
+                JsonValue::Null => continue,
             };
 
             sqlx::query(
@@ -799,7 +795,7 @@ impl ConfigSyncer {
         config_dir: &Path,
         errors: &mut Vec<SyncError>,
     ) -> Result<usize> {
-        use comsrv::core::config::{AdjustmentPoint, ControlPoint, SignalPoint, TelemetryPoint};
+        use voltage_config::comsrv::{AdjustmentPoint, ControlPoint, SignalPoint, TelemetryPoint};
 
         let mut total_count = 0;
 

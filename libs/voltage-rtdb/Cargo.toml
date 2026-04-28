@@ -1,7 +1,7 @@
 [package]
 name = "voltage-rtdb"
 version.workspace = true
-edition = "2021"
+edition = "2024"
 license.workspace = true
 
 [lib]
@@ -24,12 +24,11 @@ voltage-model = { path = "../voltage-model" }
 
 # Optional dependencies
 voltage-infra = { path = "../voltage-infra", optional = true, default-features = false, features = ["redis"] }
-redis = { workspace = true, optional = true }
 workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [features]
 default = ["redis-backend", "memory-backend"]
-redis-backend = ["voltage-infra", "redis"]
+redis-backend = ["voltage-infra"]
 memory-backend = []
 
 [dev-dependencies]

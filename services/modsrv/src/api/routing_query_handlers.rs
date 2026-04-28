@@ -12,7 +12,7 @@ use axum::{
 };
 use common::SuccessResponse;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 
 use crate::app_state::AppState;
@@ -167,7 +167,7 @@ pub async fn get_routing_table_handler(
 ) -> Result<Json<SuccessResponse<Value>>, ModSrvError> {
     let direction = match parse_direction(query.direction) {
         Ok(d) => d,
-        Err(e) => return Err(ModSrvError::InvalidData(e.to_string())),
+        Err(e) => return Err(ModSrvError::InvalidData(e)),
     };
 
     match redis_state::get_routing(

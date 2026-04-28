@@ -1,16 +1,17 @@
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use axum::{
+    Router,
     extract::{Multipart, Path, State},
     http::StatusCode,
     response::Json,
     routing::{delete, get, post},
-    Router,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tracing::error;
 use utoipa::OpenApi;
+#[cfg(feature = "swagger-ui")]
 use utoipa_swagger_ui::{Config, SwaggerUi};
 
 use crate::db_config;
@@ -45,7 +46,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/admin/logs/view", get(common::admin_api::view_log_file))
         .with_state(state);
 
-    api.merge(
+    #[cfg(feature = "swagger-ui")]
+    let api = api.merge(
         SwaggerUi::new("/docs")
             .url("/openapi.json", ApiDoc::openapi())
             .config(
@@ -53,13 +55,16 @@ pub fn build_router(state: Arc<AppState>) -> Router {
                     .default_model_rendering("model")
                     .default_models_expand_depth(1),
             ),
-    )
+    );
+
+    api
 }
 
 // ============================================================================
-// OpenAPI document
+// OpenAPI document (only consumed when swagger-ui feature is enabled)
 // ============================================================================
 
+#[cfg_attr(not(feature = "swagger-ui"), allow(dead_code))]
 #[derive(OpenApi)]
 #[openapi(
     paths(
@@ -337,7 +342,7 @@ async fn cert_upload(
                 Json(
                     json!({"success": false, "message": format!("Unsupported cert_type: '{}'. Valid: ca_cert | client_cert | client_key", cert_type)}),
                 ),
-            ))
+            ));
         },
     };
 
@@ -471,7 +476,7 @@ async fn cert_delete(
                 Json(
                     json!({"success": false, "message": "Unknown cert_type. Valid: ca_cert | client_cert | client_key"}),
                 ),
-            ))
+            ));
         },
     };
 

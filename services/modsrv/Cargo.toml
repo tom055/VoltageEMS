@@ -1,7 +1,7 @@
 [package]
 name = "modsrv"
 version.workspace = true
-edition = "2021"
+edition = "2024"
 license.workspace = true
 authors = ["Your Name <your.email@voltageenergy.com>"]
 description = "Real-time model execution service"
@@ -19,8 +19,8 @@ test = false
 # Local dependencies
 common = { path = "../../libs/common", default-features = false, features = ["redis", "sqlite", "axum", "dependency"] }
 errors = { path = "../../libs/errors", features = ["axum-support"] }
+voltage-config = { path = "../../libs/voltage-config" }
 voltage-model = { path = "../../libs/voltage-model" }
-voltage-schema-macro = { path = "../../libs/voltage-schema-macro" }
 voltage-rtdb = { path = "../../libs/voltage-rtdb" }
 voltage-rtdb-shm = { path = "../../libs/voltage-rtdb-shm" }
 voltage-routing = { path = "../../libs/voltage-routing" }
@@ -29,7 +29,6 @@ voltage-calc = { path = "../../libs/voltage-calc" }  # For RtdbStateStore (state
 
 # Core dependencies (use voltage-common where possible)
 tokio = { workspace = true }
-redis = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }

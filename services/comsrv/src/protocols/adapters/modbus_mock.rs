@@ -431,18 +431,18 @@ impl MockModbusServer {
             );
         }
 
-        let coils = state.coils.read().unwrap();
+        let coils = state.coils.read().unwrap_or_else(|e| e.into_inner());
         let byte_count = (quantity as usize + 7) / 8;
         let mut response_data = vec![0u8; byte_count];
 
         for i in 0..quantity {
             let addr = start_addr + i;
-            if let Some(&value) = coils.get(&addr) {
-                if value {
-                    let byte_idx = i as usize / 8;
-                    let bit_idx = i as usize % 8;
-                    response_data[byte_idx] |= 1 << bit_idx;
-                }
+            if let Some(&value) = coils.get(&addr)
+                && value
+            {
+                let byte_idx = i as usize / 8;
+                let bit_idx = i as usize % 8;
+                response_data[byte_idx] |= 1 << bit_idx;
             }
         }
 
@@ -483,18 +483,21 @@ impl MockModbusServer {
             );
         }
 
-        let inputs = state.discrete_inputs.read().unwrap();
+        let inputs = state
+            .discrete_inputs
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
         let byte_count = (quantity as usize + 7) / 8;
         let mut response_data = vec![0u8; byte_count];
 
         for i in 0..quantity {
             let addr = start_addr + i;
-            if let Some(&value) = inputs.get(&addr) {
-                if value {
-                    let byte_idx = i as usize / 8;
-                    let bit_idx = i as usize % 8;
-                    response_data[byte_idx] |= 1 << bit_idx;
-                }
+            if let Some(&value) = inputs.get(&addr)
+                && value
+            {
+                let byte_idx = i as usize / 8;
+                let bit_idx = i as usize % 8;
+                response_data[byte_idx] |= 1 << bit_idx;
             }
         }
 
@@ -535,7 +538,10 @@ impl MockModbusServer {
             );
         }
 
-        let regs = state.holding_registers.read().unwrap();
+        let regs = state
+            .holding_registers
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
         let byte_count = (quantity * 2) as u8;
         let mut response_data = Vec::with_capacity(quantity as usize * 2);
 
@@ -576,7 +582,10 @@ impl MockModbusServer {
             );
         }
 
-        let regs = state.input_registers.read().unwrap();
+        let regs = state
+            .input_registers
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
         let byte_count = (quantity * 2) as u8;
         let mut response_data = Vec::with_capacity(quantity as usize * 2);
 

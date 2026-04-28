@@ -12,9 +12,9 @@ use common::{
     ConfigValidator as VoltageConfigValidator, GenericValidator, ValidationLevel, ValidationResult,
 };
 
-// Import config types from service crates (for type definitions only)
-use comsrv::core::config::ComsrvConfig;
-use modsrv::config::{ModsrvConfig, RulesConfig};
+// Cross-platform config schema (shared with comsrv/modsrv via voltage-config).
+use voltage_config::comsrv::ComsrvConfig;
+use voltage_config::modsrv::{ModsrvConfig, RulesConfig};
 
 // Type aliases for validators
 type ComsrvValidator = GenericValidator<ComsrvConfig>;
@@ -201,9 +201,11 @@ channels: []
 
         // Should have error about no channels
         assert!(!result.is_valid);
-        assert!(result
-            .errors
-            .iter()
-            .any(|e| e.contains("at least one channel")));
+        assert!(
+            result
+                .errors
+                .iter()
+                .any(|e| e.contains("at least one channel"))
+        );
     }
 }

@@ -29,19 +29,13 @@ impl WritableRegisters {
 
     /// Write a single register value.
     pub fn write_single(&self, unit_id: u8, address: u16, value: u16) {
-        let mut values = self
-            .values
-            .write()
-            .expect("writable registers lock poisoned");
+        let mut values = self.values.write().unwrap_or_else(|e| e.into_inner());
         values.insert((unit_id, address), value);
     }
 
     /// Write multiple consecutive registers.
     pub fn write_multiple(&self, unit_id: u8, start_address: u16, values_to_write: &[u16]) {
-        let mut values = self
-            .values
-            .write()
-            .expect("writable registers lock poisoned");
+        let mut values = self.values.write().unwrap_or_else(|e| e.into_inner());
         for (offset, &value) in values_to_write.iter().enumerate() {
             let addr = start_address.wrapping_add(offset as u16);
             values.insert((unit_id, addr), value);
@@ -52,48 +46,8 @@ impl WritableRegisters {
     ///
     /// Returns `Some(value)` if the register was written, `None` otherwise.
     pub fn read(&self, unit_id: u8, address: u16) -> Option<u16> {
-        let values = self
-            .values
-            .read()
-            .expect("writable registers lock poisoned");
+        let values = self.values.read().unwrap_or_else(|e| e.into_inner());
         values.get(&(unit_id, address)).copied()
-    }
-
-    /// Read multiple consecutive registers.
-    ///
-    /// Returns a Vec where each element is `Some(value)` if written, `None` if not.
-    #[allow(dead_code)]
-    pub fn read_multiple(&self, unit_id: u8, start_address: u16, count: u16) -> Vec<Option<u16>> {
-        let values = self
-            .values
-            .read()
-            .expect("writable registers lock poisoned");
-        (0..count)
-            .map(|offset| {
-                let addr = start_address.wrapping_add(offset);
-                values.get(&(unit_id, addr)).copied()
-            })
-            .collect()
-    }
-
-    /// Clear all stored values (useful for testing).
-    #[allow(dead_code)]
-    pub fn clear(&self) {
-        let mut values = self
-            .values
-            .write()
-            .expect("writable registers lock poisoned");
-        values.clear();
-    }
-
-    /// Get the number of stored values.
-    #[allow(dead_code)]
-    pub fn len(&self) -> usize {
-        let values = self
-            .values
-            .read()
-            .expect("writable registers lock poisoned");
-        values.len()
     }
 }
 
@@ -126,15 +80,6 @@ mod tests {
         assert_eq!(wr.read(1, 101), Some(2000));
         assert_eq!(wr.read(1, 102), Some(3000));
         assert_eq!(wr.read(1, 103), None);
-    }
-
-    #[test]
-    fn test_read_multiple() {
-        let wr = WritableRegisters::new();
-        wr.write_single(1, 101, 500);
-
-        let values = wr.read_multiple(1, 100, 3);
-        assert_eq!(values, vec![None, Some(500), None]);
     }
 
     #[test]

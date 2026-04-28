@@ -1,7 +1,7 @@
 [package]
 name = "comsrv"
 version.workspace = true
-edition = "2021"
+edition = "2024"
 license.workspace = true
 
 [lib]
@@ -16,11 +16,11 @@ path = "src/main.rs"
 # Local dependencies
 common = { path = "../../libs/common", default-features = false, features = ["redis", "sqlite", "axum", "openapi"] }
 errors = { path = "../../libs/errors", features = ["axum-support"] }
+voltage-config = { path = "../../libs/voltage-config", features = ["openapi"] }
 voltage-model = { path = "../../libs/voltage-model" }
 voltage-routing = { path = "../../libs/voltage-routing" }
 voltage-rtdb = { path = "../../libs/voltage-rtdb" }
 voltage-rtdb-shm = { path = "../../libs/voltage-rtdb-shm" }
-voltage-schema-macro = { path = "../../libs/voltage-schema-macro" }
 
 # Protocol libraries
 voltage_modbus = { version = "0.5.0", optional = true, features = ["rtu"] }
@@ -66,7 +66,6 @@ tower = { workspace = true }
 
 # Data structures
 dashmap = { workspace = true }
-itoa = { workspace = true }  # Stack-allocated integer formatting
 arc-swap = "1.7"
 parking_lot = { workspace = true }  # Non-poisoning RwLock for SlotBitmap
 bytes = { workspace = true }
@@ -92,9 +91,10 @@ tempfile = { workspace = true }
 tower = { workspace = true }
 http-body-util = "0.1"
 redis = { workspace = true }
+hex = "0.4"
 
 [features]
-default = ["modbus", "gpio", "voltage_485", "openapi"]
+default = ["modbus", "gpio", "voltage_485", "openapi", "iec61850"]
 modbus = ["dep:voltage_modbus"]
 iec104 = ["dep:voltage_iec104"]
 opcua = ["dep:async-opcua"]
@@ -109,6 +109,7 @@ http = ["json-mapping", "dep:reqwest"]  # HTTP protocol (polling + webhook, JSON
 ble = ["dep:btleplug"]  # BLE GATT protocol (hybrid: notify + read/write)
 zigbee = []  # Zigbee protocol via TCP gateway (Raw ZCL, ZNP, EZSP)
 matter = []  # Matter smart home protocol (UDP transport, self-implemented framing)
+iec61850 = []  # IEC 61850 MMS protocol (TCP/ISO transport, pure Rust implementation)
 tracing-support = []
 swagger-ui = ["utoipa-swagger-ui"]
 openapi = []

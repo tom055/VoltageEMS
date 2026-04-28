@@ -8,6 +8,7 @@ members = [
     "libs/common",
     "libs/errors",
     "libs/voltage-calc",
+    "libs/voltage-config",
     "libs/voltage-core",
     "libs/voltage-shm",
     # libs/voltage-comlink removed - types moved to comsrv
@@ -32,7 +33,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 license = "MIT OR Apache-2.0"
 
 # Clippy lints configuration
@@ -72,9 +73,9 @@ sqlx = { version = "0.8", default-features = false, features = [
     "uuid",
     "macros",
 ] }
-redis = { version = "0.26", features = ["tokio-comp", "connection-manager"] }
-bb8 = "0.8"
-bb8-redis = "0.16"
+redis = { version = "0.32", features = ["tokio-comp", "connection-manager"] }
+bb8 = "0.9"
+bb8-redis = "0.24"
 
 # Error handling
 anyhow = "1.0"

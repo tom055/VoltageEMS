@@ -1216,6 +1216,7 @@ async fn test_create_channel_handler_returns_response() {
         protocol: "virtual".to_string(),
         enabled: Some(true),
         parameters: params,
+        logging: None,
     };
 
     let request = Request::builder()
@@ -1967,10 +1968,12 @@ async fn test_get_point_mapping_with_invalid_type_returns_400() {
     let response: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
     assert_eq!(response["success"], false);
-    assert!(response["error"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("Invalid point type 'X'"));
+    assert!(
+        response["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Invalid point type 'X'")
+    );
 }
 
 #[tokio::test]
@@ -1998,10 +2001,12 @@ async fn test_get_point_mapping_channel_not_found_returns_404() {
     let response: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
     assert_eq!(response["success"], false);
-    assert!(response["error"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("Channel 9999 not found"));
+    assert!(
+        response["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Channel 9999 not found")
+    );
 }
 
 #[tokio::test]
@@ -2034,10 +2039,12 @@ async fn test_get_point_mapping_point_not_found_returns_404() {
     let response: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
     assert_eq!(response["success"], false);
-    assert!(response["error"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("Point 999 (type T) not found"));
+    assert!(
+        response["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Point 999 (type T) not found")
+    );
 }
 
 /// Critical test: Write-Read closed loop validation

@@ -178,18 +178,16 @@ fn get_linux_memory_info() -> (Option<usize>, Option<usize>) {
 
     if let Ok(meminfo) = fs::read_to_string("/proc/meminfo") {
         for line in meminfo.lines() {
-            if line.starts_with("MemAvailable:") {
-                if let Some(kb_str) = line.split_whitespace().nth(1) {
-                    if let Ok(kb) = kb_str.parse::<usize>() {
-                        available_mb = Some(kb / 1024);
-                    }
-                }
-            } else if line.starts_with("MemTotal:") {
-                if let Some(kb_str) = line.split_whitespace().nth(1) {
-                    if let Ok(kb) = kb_str.parse::<usize>() {
-                        total_mb = Some(kb / 1024);
-                    }
-                }
+            if line.starts_with("MemAvailable:")
+                && let Some(kb_str) = line.split_whitespace().nth(1)
+                && let Ok(kb) = kb_str.parse::<usize>()
+            {
+                available_mb = Some(kb / 1024);
+            } else if line.starts_with("MemTotal:")
+                && let Some(kb_str) = line.split_whitespace().nth(1)
+                && let Ok(kb) = kb_str.parse::<usize>()
+            {
+                total_mb = Some(kb / 1024);
             }
 
             if available_mb.is_some() && total_mb.is_some() {
@@ -238,13 +236,13 @@ pub fn check_disk_space(path: &str, _required_mb: usize) -> VoltageResult<bool> 
 
     // For now, we'll use a simplified check based on filesystem metadata
     // Real disk space checking would require platform-specific system calls
-    if let Ok(metadata) = std::fs::metadata(check_path) {
-        if metadata.is_dir() || metadata.is_file() {
-            debug!("Path {} exists and is accessible", check_path.display());
-            // Since we can't easily get disk space without external dependencies,
-            // we'll just check if the path is accessible
-            return Ok(true);
-        }
+    if let Ok(metadata) = std::fs::metadata(check_path)
+        && (metadata.is_dir() || metadata.is_file())
+    {
+        debug!("Path {} exists and is accessible", check_path.display());
+        // Since we can't easily get disk space without external dependencies,
+        // we'll just check if the path is accessible
+        return Ok(true);
     }
 
     warn!("Cannot verify disk space at {}", path.display());

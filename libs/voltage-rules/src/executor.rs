@@ -12,15 +12,16 @@ use crate::types::{
     RuleVariable, RuleWires,
 };
 use serde::Serialize;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 use voltage_calc::{CalcEngine, MemoryStateStore, StateStore};
-use voltage_model::{sanitize_value, ValidationConfig};
-use voltage_routing::set_action_point;
+use voltage_model::{ValidationConfig, sanitize_value};
 use voltage_routing::RoutingCache;
+use voltage_routing::set_action_point;
+use voltage_rtdb::KeySpaceConfig;
 use voltage_rtdb::numfmt::precomputed;
 use voltage_rtdb::traits::Rtdb;
-use voltage_rtdb::KeySpaceConfig;
 use voltage_rtdb_shm::{ShmNotifier, UnifiedReader};
 
 /// Convert dynamic point type string to static str for zero-allocation ActionResult
@@ -105,10 +106,8 @@ fn snapshot_or_reuse(
     values: &HashMap<String, f64>,
     values_changed: bool,
 ) -> Arc<HashMap<String, f64>> {
-    if !values_changed {
-        if let Some(snapshot) = cache.as_ref() {
-            return Arc::clone(snapshot);
-        }
+    if !values_changed && let Some(snapshot) = cache.as_ref() {
+        return Arc::clone(snapshot);
     }
     let snapshot = Arc::new(values.clone());
     *cache = Some(Arc::clone(&snapshot));
@@ -126,9 +125,9 @@ fn evaluate_token_formula(
     let expr: String = tokens
         .iter()
         .map(|t| match t {
-            serde_json::Value::String(s) => s.clone(),
-            serde_json::Value::Number(n) => n.to_string(),
-            other => format!("{}", other),
+            serde_json::Value::String(s) => Cow::Borrowed(s.as_str()),
+            serde_json::Value::Number(n) => Cow::Owned(n.to_string()),
+            other => Cow::Owned(other.to_string()),
         })
         .collect::<Vec<_>>()
         .join(" ");
@@ -682,8 +681,11 @@ impl<R: Rtdb, S: StateStore> RuleExecutor<R, S> {
                 if let Some((val, _ts)) =
                     reader.get_instance(instance_id, instance_type, point, &self.routing_cache)
                 {
-                    // SharedMemory hit - fastest path
-                    values_changed |= values.insert(var_name, val) != Some(val);
+                    // SharedMemory hit - fastest path.
+                    // total_cmp avoids NaN != NaN busting the Arc snapshot every cycle.
+                    values_changed |= values
+                        .insert(var_name, val)
+                        .is_none_or(|prev| prev.total_cmp(&val).is_ne());
                     continue;
                 }
             }
@@ -723,7 +725,9 @@ impl<R: Rtdb, S: StateStore> RuleExecutor<R, S> {
                                 );
                                 0.0
                             });
-                        values_changed |= values.insert(var_name, val) != Some(val);
+                        values_changed |= values
+                            .insert(var_name, val)
+                            .is_none_or(|prev| prev.total_cmp(&val).is_ne());
                     }
                 },
                 Err(e) => {
@@ -775,14 +779,14 @@ impl<R: Rtdb, S: StateStore> RuleExecutor<R, S> {
                 let condition_str = format_conditions(&rule.rule);
 
                 // Find the wire target for this rule's output
-                if let Some(targets) = wires.get(&rule.name) {
-                    if let Some(target) = targets.first() {
-                        return (
-                            Some(target.as_str()),
-                            Some(rule.name.clone()),
-                            Some(condition_str),
-                        );
-                    }
+                if let Some(targets) = wires.get(&rule.name)
+                    && let Some(target) = targets.first()
+                {
+                    return (
+                        Some(target.as_str()),
+                        Some(rule.name.clone()),
+                        Some(condition_str),
+                    );
                 }
             }
         }

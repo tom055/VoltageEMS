@@ -18,18 +18,18 @@ use crate::state::AppState;
 /// Spawn all background tasks. Each task honours the given `CancellationToken`.
 pub fn spawn_all(state: Arc<AppState>, shutdown: CancellationToken) {
     {
-        let s = state.clone();
+        let s = Arc::clone(&state);
         let sd = shutdown.clone();
         tokio::spawn(async move { collector_task(s, sd).await });
     }
     {
-        let s = state.clone();
+        let s = Arc::clone(&state);
         let sd = shutdown.clone();
         tokio::spawn(async move { flush_task(s, sd).await });
     }
     {
-        let s = state.clone();
-        let sd = shutdown.clone();
+        let s = state;
+        let sd = shutdown;
         tokio::spawn(async move { cleanup_task(s, sd).await });
     }
 }
@@ -167,7 +167,10 @@ async fn cleanup_task(state: Arc<AppState>, shutdown: CancellationToken) {
 /// How many seconds until the next 02:00 UTC (minimum 60s to avoid tight loops).
 fn secs_until_02_utc() -> u64 {
     let now = Utc::now();
-    let today_02: chrono::DateTime<Utc> = now.date_naive().and_hms_opt(2, 0, 0).unwrap().and_utc();
+    let Some(today_02_naive) = now.date_naive().and_hms_opt(2, 0, 0) else {
+        return 60;
+    };
+    let today_02: chrono::DateTime<Utc> = today_02_naive.and_utc();
 
     let target = if now < today_02 {
         today_02

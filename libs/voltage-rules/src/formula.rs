@@ -14,7 +14,7 @@
 //! assert_eq!(result, 20.0);
 //! ```
 
-use evalexpr::{eval_number_with_context, ContextWithMutableVariables, HashMapContext, Value};
+use evalexpr::{ContextWithMutableVariables, HashMapContext, Value, eval_number_with_context};
 use std::collections::HashMap;
 
 /// Evaluate a mathematical formula with variable substitution
@@ -50,34 +50,6 @@ pub fn evaluate_formula(formula: &str, variables: &HashMap<String, f64>) -> Resu
     // Evaluate the expression
     eval_number_with_context(formula, &context)
         .map_err(|e| format!("Formula '{}' evaluation failed: {}", formula, e))
-}
-
-/// Validate a formula syntax without evaluating
-///
-/// This is useful for checking formula correctness at configuration time
-/// before any variables are available.
-///
-/// # Arguments
-/// * `formula` - Mathematical expression string to validate
-/// * `expected_variables` - Optional list of variable names the formula should use
-///
-/// # Returns
-/// * `Ok(())` - Formula is syntactically valid
-/// * `Err(String)` - Syntax error description
-#[allow(dead_code)]
-pub fn validate_formula(formula: &str, expected_variables: &[&str]) -> Result<(), String> {
-    // Create a test context with dummy values for all expected variables
-    let mut context = HashMapContext::new();
-    for name in expected_variables {
-        context
-            .set_value((*name).to_string(), Value::Float(1.0))
-            .map_err(|e| format!("Invalid variable name '{}': {}", name, e))?;
-    }
-
-    // Try to evaluate - this will catch syntax errors
-    eval_number_with_context(formula, &context)
-        .map(|_| ())
-        .map_err(|e| format!("Invalid formula '{}': {}", formula, e))
 }
 
 // ============================================================================
@@ -163,24 +135,6 @@ mod tests {
         // evalexpr returns infinity for division by zero, not an error
         assert!(result.is_ok());
         assert!(result.unwrap().is_infinite());
-    }
-
-    #[test]
-    fn test_validate_formula_valid() {
-        assert!(validate_formula("A + B", &["A", "B"]).is_ok());
-        assert!(validate_formula("X * 2 + Y / 3", &["X", "Y"]).is_ok());
-    }
-
-    #[test]
-    fn test_validate_formula_invalid_syntax() {
-        let result = validate_formula("A + +", &["A"]);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_validate_formula_missing_variable() {
-        let result = validate_formula("A + B", &["A"]);
-        assert!(result.is_err());
     }
 
     #[test]

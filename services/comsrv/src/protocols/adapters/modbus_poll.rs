@@ -167,8 +167,8 @@ fn build_register_segments<'a>(
                 if gap <= max_gap && new_total <= max_batch_size {
                     seg.end_address = addr + count;
                     seg.points.push((addr, count, point));
-                } else {
-                    segments.push(current_segment.take().unwrap());
+                } else if let Some(segment) = current_segment.take() {
+                    segments.push(segment);
                     current_segment = Some(RegisterSegment {
                         start_address: addr,
                         end_address: addr + count,
@@ -221,19 +221,19 @@ async fn read_register_segment<'a>(
         if end <= registers.len() {
             let point_regs = &registers[offset..end];
 
-            if let ProtocolAddress::Modbus(modbus_addr) = &point.address {
-                if let Ok(value) = decode_registers(
+            if let ProtocolAddress::Modbus(modbus_addr) = &point.address
+                && let Ok(value) = decode_registers(
                     point_regs,
                     modbus_addr.format,
                     modbus_addr.byte_order,
                     modbus_addr.bit_position,
-                ) {
-                    let transformed = apply_transform(value, &point.transform);
-                    results.push((
-                        point.id,
-                        DataPoint::new(point.id, point.point_type, transformed),
-                    ));
-                }
+                )
+            {
+                let transformed = apply_transform(value, &point.transform);
+                results.push((
+                    point.id,
+                    DataPoint::new(point.id, point.point_type, transformed),
+                ));
             }
         }
     }

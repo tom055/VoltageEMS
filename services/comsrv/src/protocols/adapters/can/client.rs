@@ -2,13 +2,13 @@
 //!
 //! Implements the protocol layer's Protocol traits for LYNK CAN communication.
 
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 
 use arc_swap::ArcSwapOption;
 use socketcan::{CanSocket, EmbeddedFrame, Frame, Socket};
-use tokio::sync::broadcast;
 use tokio::sync::RwLock;
+use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
 use voltage_model::PointType;
 
@@ -188,6 +188,7 @@ impl CanClient {
             #[cfg(feature = "tracing-support")]
             tracing::info!("Interval created, starting receive loop");
 
+            #[cfg(feature = "tracing-support")]
             let mut poll_count = 0u64;
             loop {
                 #[cfg(feature = "tracing-support")]
@@ -439,8 +440,10 @@ impl Protocol for CanClient {
             error_count: self.error_count.load(Ordering::Relaxed),
             last_error: self.last_error.load().as_ref().map(|s| (**s).clone()),
             extra: serde_json::json!({
-                "can_interface": self.config.can_interface,
+                "device": self.config.can_interface,
                 "bitrate": self.config.bitrate,
+                "connect_timeout_ms": self.config.connect_timeout_ms,
+                "retry_interval_ms": self.config.retry_interval_ms,
             }),
         })
     }
@@ -563,16 +566,18 @@ impl HasMetadata for CanClient {
             description: "Controller Area Network (CAN) bus protocol for industrial and automotive applications.",
             is_recommended: true,
             example_config: serde_json::json!({
-                "interface": "can0",
+                "device": "can0",
                 "bitrate": 250000,
-                "rx_poll_interval_ms": 50,
-                "data_read_interval_ms": 1000
+                "connect_timeout_ms": 3000,
+                "read_timeout_ms": 3000,
+                "retry_interval_ms": 2000,
+                "rx_poll_interval_ms": 50
             }),
             parameters: vec![
                 ParameterMetadata::optional(
-                    "interface",
-                    "CAN Interface",
-                    "SocketCAN interface name (e.g., can0, vcan0)",
+                    "device",
+                    "CAN Device",
+                    "SocketCAN device name (e.g., can0, vcan0). Legacy key 'interface' is also accepted.",
                     ParameterType::String,
                     serde_json::json!("can0"),
                 ),
@@ -584,18 +589,32 @@ impl HasMetadata for CanClient {
                     serde_json::json!(250000),
                 ),
                 ParameterMetadata::optional(
+                    "connect_timeout_ms",
+                    "Connect Timeout (ms)",
+                    "Timeout for opening the CAN socket",
+                    ParameterType::Integer,
+                    serde_json::json!(3000),
+                ),
+                ParameterMetadata::optional(
+                    "read_timeout_ms",
+                    "Read Timeout (ms)",
+                    "Timeout for receiving a CAN frame",
+                    ParameterType::Integer,
+                    serde_json::json!(3000),
+                ),
+                ParameterMetadata::optional(
+                    "retry_interval_ms",
+                    "Retry Interval (ms)",
+                    "Reconnect interval after a connection failure",
+                    ParameterType::Integer,
+                    serde_json::json!(2000),
+                ),
+                ParameterMetadata::optional(
                     "rx_poll_interval_ms",
                     "RX Poll Interval (ms)",
                     "Interval for polling received CAN frames",
                     ParameterType::Integer,
                     serde_json::json!(50),
-                ),
-                ParameterMetadata::optional(
-                    "data_read_interval_ms",
-                    "Data Read Interval (ms)",
-                    "Interval for reading and processing data",
-                    ParameterType::Integer,
-                    serde_json::json!(1000),
                 ),
             ],
         }

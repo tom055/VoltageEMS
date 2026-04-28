@@ -319,10 +319,10 @@ async fn remote_tail(host: &str, service: &str, api: bool, grep: &Option<String>
 
     // Get initial total line count (don't print, just record offset)
     let init_url = format!("{base}/view?file={file_name}&lines=0");
-    if let Ok(resp) = client.get(&init_url).send().await {
-        if let Ok(body) = resp.json::<serde_json::Value>().await {
-            seen_total = body["total"].as_u64().unwrap_or(0) as usize;
-        }
+    if let Ok(resp) = client.get(&init_url).send().await
+        && let Ok(body) = resp.json::<serde_json::Value>().await
+    {
+        seen_total = body["total"].as_u64().unwrap_or(0) as usize;
     }
 
     loop {
@@ -444,9 +444,10 @@ fn handle_list(
     date: &Option<String>,
     json: bool,
 ) -> Result<()> {
-    let date_prefix = date
-        .clone()
-        .unwrap_or_else(|| chrono::Local::now().format("%Y%m%d").to_string());
+    let date_prefix = date.as_deref().map_or_else(
+        || chrono::Local::now().format("%Y%m%d").to_string(),
+        |d| d.to_string(),
+    );
 
     if !log_dir.exists() {
         anyhow::bail!("Log directory not found: {}", log_dir.display());
@@ -731,7 +732,8 @@ pub async fn handle_command(command: LogCommands, json: bool, host: Option<&str>
             if host.is_some() {
                 anyhow::bail!(
                     "Interactive UI is not supported for remote hosts. Use 'monarch logs view {} --host ...' or 'monarch logs tail {} --host ...' instead.",
-                    service, service
+                    service,
+                    service
                 );
             }
             let log_dir = resolve_log_dir();

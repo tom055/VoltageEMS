@@ -15,8 +15,8 @@
 //! Runtime settings (broker URL, intervals, Redis patterns) are persisted in
 //! the shared SQLite `netsrv_config` table.
 
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 use sqlx::sqlite::SqlitePoolOptions;
 use tokio::sync::{Mutex, Notify, RwLock};
@@ -93,7 +93,9 @@ async fn main() -> anyhow::Result<()> {
         mqtt_connected: Arc::new(AtomicBool::new(false)),
         reconnect_signal: Arc::new(Notify::new()),
         disconnect_requested: Arc::new(AtomicBool::new(false)),
-        http_client: reqwest::Client::new(),
+        http_client: reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()?,
     });
 
     // ── Background tasks ──────────────────────────────────────────────────────

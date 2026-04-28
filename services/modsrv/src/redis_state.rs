@@ -4,7 +4,7 @@
 //! control-plane read/write for instances/products, keeping business
 //! logic and type safety directly in Rust.
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use bytes::Bytes;
 use common::RedisRoutingKeys;
 use serde_json::{Map, Value};
@@ -48,13 +48,13 @@ impl fmt::Display for RoutingDirection {
     }
 }
 
-fn value_to_string(value: &Value) -> String {
+fn value_into_bytes(value: Value) -> Bytes {
     match value {
-        Value::String(s) => s.clone(),
-        Value::Number(n) => n.to_string(),
-        Value::Bool(b) => b.to_string(),
-        Value::Null => String::new(),
-        other => other.to_string(),
+        Value::String(s) => Bytes::from(s),
+        Value::Number(n) => Bytes::from(n.to_string()),
+        Value::Bool(b) => Bytes::from(b.to_string()),
+        Value::Null => Bytes::new(),
+        other => Bytes::from(other.to_string()),
     }
 }
 
@@ -443,7 +443,6 @@ where
 
 /// Write measurement data (replaces `modsrv_sync_measurement`).
 /// EN: Write measurement data (replaces `modsrv_sync_measurement`).
-#[allow(deprecated)] // Uses time_millis internally until TimeProvider migration is complete
 pub async fn sync_measurement<R>(
     redis: &R,
     instance_id: u32,
@@ -458,7 +457,7 @@ where
     // Use into_iter() to consume ownership and avoid cloning keys
     let mut fields: Vec<(String, Bytes)> = measurement
         .into_iter()
-        .map(|(k, v)| (k, Bytes::from(value_to_string(&v))))
+        .map(|(k, v)| (k, value_into_bytes(v)))
         .collect();
     fields.push(("_updated_at".to_string(), Bytes::from(now_ms.to_string())));
 
@@ -646,10 +645,12 @@ mod tests {
         // Instance does not exist in index
         let result = clear_routing_for_instance(&rtdb, "nonexistent").await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Instance not found"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Instance not found")
+        );
     }
 
     #[tokio::test]

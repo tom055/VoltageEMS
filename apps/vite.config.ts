@@ -13,7 +13,11 @@ import autoprefixer from 'autoprefixer'
 import pxtorem from 'postcss-pxtorem'
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  // 生产构建时移除 console.* 和 debugger，开发模式保留
+  esbuild: {
+    drop: mode === 'production' ? ['console', 'debugger'] : [],
+  },
   plugins: [
     vue(),
     vueDevTools(),
@@ -40,14 +44,19 @@ export default defineConfig({
         return !/\.(png|jpe?g|gif|svg|webp|avif|bmp|ico)$/i.test(file)
       },
     }),
-    // 打包分析插件 - 生成分析报告到 dist/stats.html
-    visualizer({
-      open: true, // 构建后自动打开分析报告
-      gzipSize: true,
-      brotliSize: true,
-      filename: 'dist/stats.html', // 生成分析报告文件
-      emitFile: true,
-    }),
+    // 打包分析插件 - 仅在 analyze 模式下生成 dist/stats.html
+    // 使用：VITE_ANALYZE=true pnpm build
+    ...(process.env.VITE_ANALYZE
+      ? [
+          visualizer({
+            open: true,
+            gzipSize: true,
+            brotliSize: true,
+            filename: 'dist/stats.html',
+            emitFile: true,
+          }),
+        ]
+      : []),
   ],
   server: {
     host: '0.0.0.0', // 允许外部访问
@@ -155,11 +164,6 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000,
     // 压缩配置 - 使用 esbuild（更快且更稳定）
     minify: 'esbuild',
-    // esbuild 默认不会移除 console，且压缩更安全
-    // 如果需要移除 console，可以添加：
-    // esbuildOptions: {
-    //   drop: ['console', 'debugger'],
-    // },
     // Rollup 配置 - 代码分割优化
     rollupOptions: {
       output: {
@@ -204,4 +208,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

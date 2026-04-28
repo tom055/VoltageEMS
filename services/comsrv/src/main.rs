@@ -38,10 +38,8 @@ use comsrv::{
     shutdown_services, wait_for_shutdown,
 };
 use voltage_routing::load_routing_maps;
-use voltage_rtdb_shm::{is_shm_available, snapshot_exists, SnapshotConfig, SnapshotManager};
-use voltage_rtdb_shm::{
-    ChannelToSlotIndex, ReverseSlotIndex, SharedConfig, ShmHandle, UnifiedWriter,
-};
+use voltage_rtdb_shm::{ChannelToSlotIndex, SharedConfig, ShmHandle, UnifiedWriter};
+use voltage_rtdb_shm::{SnapshotConfig, SnapshotManager, is_shm_available, snapshot_exists};
 
 #[tokio::main]
 async fn main() -> VoltageResult<()> {
@@ -128,10 +126,13 @@ async fn main() -> VoltageResult<()> {
     {
         use voltage_rtdb::Rtdb;
         let online_key = voltage_model::KeySpaceConfig::production_cached().channel_online_key();
-        if let Err(e) = redis_rtdb.del(&online_key).await {
-            warn!("Failed to clear channel online hash: {}", e);
-        } else {
-            debug!("Cleared channel online status hash (fresh start)");
+        match redis_rtdb.del(&online_key).await {
+            Err(e) => {
+                warn!("Failed to clear channel online hash: {}", e);
+            },
+            _ => {
+                debug!("Cleared channel online status hash (fresh start)");
+            },
         }
     }
 
@@ -306,32 +307,24 @@ async fn main() -> VoltageResult<()> {
     let rtdb_for_shutdown = Arc::clone(&rtdb);
 
     // ============ ShmRedisSync: background SHM → Redis flush ============
-    // Build ReverseSlotIndex and start the async flush task.
     // Must happen before shm_handle/routing_cache move into ChannelManager.
     let (shm_sync_shutdown_tx, shm_sync_shutdown_rx) = tokio::sync::watch::channel(false);
     let shm_sync_handle = if let Some(ref handle) = shm_handle {
-        // Build reverse index from the forward ChannelToSlotIndex
         let slot_count = handle
-            .writer()
-            .and_then(|g| g.as_ref().map(|w| w.slot_count()))
+            .layout_arc()
+            .map(|layout| {
+                info!(
+                    "ReverseSlotIndex: {} mapped slots out of {}",
+                    layout.reverse_index.mapped_count(),
+                    layout.reverse_index.slot_count()
+                );
+                layout.writer.slot_count()
+            })
             .unwrap_or(0);
-        let forward_index = handle.index_arc().unwrap_or_else(|| {
-            Arc::new(ChannelToSlotIndex::from_unified_writer(
-                handle.writer().unwrap().as_ref().unwrap(),
-            ))
-        });
-        let reverse = ReverseSlotIndex::from_forward(&forward_index, slot_count);
-        let reverse_swap = Arc::new(arc_swap::ArcSwap::new(Arc::new(reverse)));
-        info!(
-            "ReverseSlotIndex: {} mapped slots out of {}",
-            forward_index.len(),
-            slot_count
-        );
 
         let sync = comsrv::store::ShmRedisSync::new(
             Arc::clone(&rtdb),
             Arc::clone(handle),
-            reverse_swap,
             Arc::clone(&routing_cache),
             slot_count,
         );
@@ -525,10 +518,13 @@ async fn main() -> VoltageResult<()> {
     {
         use voltage_rtdb::Rtdb;
         let online_key = voltage_model::KeySpaceConfig::production_cached().channel_online_key();
-        if let Err(e) = rtdb_for_shutdown.del(&online_key).await {
-            warn!("Failed to clear channel online hash on shutdown: {}", e);
-        } else {
-            info!("Cleared channel online status (service stopped)");
+        match rtdb_for_shutdown.del(&online_key).await {
+            Err(e) => {
+                warn!("Failed to clear channel online hash on shutdown: {}", e);
+            },
+            _ => {
+                info!("Cleared channel online status (service stopped)");
+            },
         }
     }
 
